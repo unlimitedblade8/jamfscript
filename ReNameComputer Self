@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Get Computer CurrentName
+currentName="$(scutil --get HostName)"
+if [ -n "$currentName" ];then
+        osascript -e 'tell application "System Events" to display dialog "请复制当前计算机名:  '"$currentName"'" buttons {"已复制"} default button 1'
+fi
+
+# Prompt for the ComputerName given by User
+correctName="$(osascript -e 'Tell application "System Events" to display dialog "请输入新的计算机名：‘Name-数字’, 如SDZX64M0B82B-1" default answer ""' -e 'text returned of result' 2>/dev/null)"
+
+if [ -z $correctName ];then           
+  exit
+fi
+
+# Get Current record details from the local computer
+currentHostName=$(scutil --get HostName)
+currentCompName=$(scutil --get ComputerName)
+currentLocalHostName=$(scutil --get LocalHostName)
+# Fix ComputerName
+if [[ -z ${currentHostName} ]] || [[ ! ${currentCompName} == ${correctName} ]];then
+            scutil --set ComputerName ${correctName}
+fi
+# Fix LocalHostName
+ if [[ -z ${currentLocalHostName} ]] || [[ ! ${currentLocalHostName} == ${correctName} ]];then
+            scutil --set LocalHostName ${correctName}
+fi
+# Fix HostName
+if [[ -z ${currentHostName} ]] || [[ ! ${currentHostName} == ${correctName} ]];then
+            scutil --set HostName ${correctName}
+fi
+# Update Jamf Record
+jamf recon
