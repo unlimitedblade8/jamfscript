@@ -1,0 +1,61 @@
+#!/bin/bash
+
+USERNAME=`who |grep console| awk '{print $1}'`
+#USERNAME=stat -f "%Su" /dev/console
+
+#create LaunchDaemon to remove admin rights
+echo "<?xml version="1.0" encoding="UTF-8"?> 
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"> 
+<plist version="1.0"> 
+<dict>
+<key>Disabled</key>
+<true/>
+<key>Label</key> 
+  <string>com.company.adminremove</string> 
+   <key>ProgramArguments</key> 
+   <array> 
+   <string>/Library/Scripts/removeTempAdmin.sh</string>
+    </array>
+   <key>StartCalendarInterval</key>
+   <dict>
+        <key>Day</key>
+        <integer>25</integer>    #Begin at 2019/5/25#
+        <key>Month</key>
+        <integer>11</integer>
+   </dict>
+</dict> 
+</plist>" > /Library/LaunchDaemons/com.company.adminremove.plist
+              
+
+#create admin rights removal script
+echo '#!/bin/bash
+USERNAME=`cat /var/tempAdmin/userToRemove`
+sudo /usr/sbin/dseditgroup -o edit -d $USERNAME -t user admin
+rm -rf /var/tempAdmin/userToRemove
+rm -rf /Library/LaunchDaemons/com.company.adminremove.plist
+rm -rf /Library/Scripts/removeTempAdmin.sh
+exit 0'  > /Library/Scripts/removeTempAdmin.sh
+
+#set the permission on the files just made
+chown root:wheel /Library/LaunchDaemons/com.company.adminremove.plist
+chmod 644 /Library/LaunchDaemons/com.company.adminremove.plist
+chown root:wheel /Library/Scripts/removeTempAdmin.sh
+chmod 755 /Library/Scripts/removeTempAdmin.sh
+
+#enable and load the LaunchDaemon
+defaults write /Library/LaunchDaemons/com.company.adminremove.plist Disabled -bool false
+launchctl load -w /Library/LaunchDaemons/com.company.adminremove.plist
+
+#build log files in /var/tempAdmin
+mkdir /var/tempAdmin
+TIME=`date "+Date:%m-%d-%Y TIME:%H:%M:%S"`
+echo $TIME " by " $USERNAME >> /var/tempAdmin/15minAdmin.txt
+
+#note the user
+echo $USERNAME >> /var/tempAdmin/userToRemove
+
+#give current logged user admin rights
+sudo /usr/sbin/dseditgroup -o edit -a $USERNAME -t user admin >> /var/tempAdmin/adduser.txt
+
+#notify
+osascript -e 'tell application "System Events" to display dialog "已授权'$USERNAME'管理员权限，有效期180天。" buttons {"Ok"} default button 1'
