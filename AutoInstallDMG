@@ -1,0 +1,10 @@
+
+#BY unlimitedblade8
+#Firstly, Use Composer to Repackage the DMG to igore the agreement then finish the next
+#Example of QQ
+
+#!/bin/bash
+hdiutil attach /Library/tmp/qq.dmg
+cp -rf /Volumes/QQ/Library/tmp/QQ.app/ /Applications/QQ.app
+hdiutil detach /Volumes/QQ/
+rm -f /Library/tmp/qq.dmg
