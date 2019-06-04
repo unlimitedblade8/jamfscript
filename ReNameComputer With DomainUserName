@@ -1,0 +1,105 @@
+#!/bin/bash
+
+
+###############################################################
+#	Copyright (c) 2017, D8 Services Ltd.  All rights reserved.  
+#											
+#	
+#	THIS SOFTWARE IS PROVIDED BY D8 SERVICES LTD. "AS IS" AND ANY
+#	EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+#	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+#	DISCLAIMED. IN NO EVENT SHALL D8 SERVICES LTD. BE LIABLE FOR ANY
+#	DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+#	(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+#	ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+#	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#
+###############################################################
+#
+#
+#
+#	employeeNumber in Jamf against current Mac in User and Location
+#	Check Local Computer Name vs Jamf account 
+#	if this fails, fix the nameand run recon
+
+apiUser="dd"
+apiPass="142857"
+	
+jamfURL="https://unlimitedblade.club:8443"
+
+####################################################
+## Lets Begin ######################################
+####################################################
+
+## check API Credentials
+if [[ -z "${apiUser}" ]] || [[ -z "${apiPass}" ]] ;then
+	echo "Error! API User credentials not complete. Exiting"
+	exit 1
+fi
+
+## Check for jamf URL, if not there, or the jamf preference is missing or not entered, exit
+if [[ -z "${jamfURL}" ]];then
+	jamfURL=$(defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url 2>/dev/null | sed 's|/$||')
+	if [[ -z "${jamfURL}" ]];then
+		echo "Error! The JSS URL was not entered in the script, or located on this machine. Exiting"
+		exit 1
+	fi
+fi
+
+## Check JSS Availability
+jss_availability=`jamf checkJSSConnection -retry 6 | tr ' ' '\n' | tail -n1`
+if [ ! $jss_availability = "available." ]; then
+	echo "ERROR: JSS Unavailable, nothing to do."
+	exit 0
+fi
+
+
+####################################################
+## Gather current Machine info #####################
+####################################################
+
+## Format Output for Current Computer
+serialNumber=$(system_profiler SPHardwareDataType | awk '/Serial Number/{print $4}')
+
+## Get Current record details from the local computer
+currentHostName=$(scutil --get HostName)
+currentCompName=$(scutil --get ComputerName)
+currentLocalHostName=$(scutil --get LocalHostName)
+
+####################################################
+## Gather Jamf user Information ####################
+
+####################################################
+## Format Output for Current Computer
+userName=$(curl -sku ${apiUser}:${apiPass} -H "accept: text/xml" ${jamfURL}/JSSResource/computers/serialnumber/$serialNumber | xmllint --xpath '/computer/location/username/text()' -)
+
+if [[ -z ${userName} ]];then
+	echo "UserName is empty, exiting."
+	exit 2
+else
+	correctName="MC${userName}MAC"
+	correctName=$(echo ${correctName} | awk '{print toupper($0)}')
+	echo "UserName is ${userName}"
+	echo "ComputerName is ${correctName}"
+fi
+
+## Fix ComputerName
+if [[ -z ${currentHostName} ]] || [[ ! ${currentCompName} == ${correctName} ]];then
+	scutil --set ComputerName ${correctName}
+fi
+
+## Fix LocalHostName
+if [[ -z ${currentLocalHostName} ]] || [[ ! ${currentLocalHostName} == ${correctName} ]];then
+	scutil --set LocalHostName ${correctName}
+fi
+
+## Fix HostName
+if [[ -z ${currentHostName} ]] || [[ ! ${currentHostName} == ${correctName} ]];then
+	scutil --set HostName ${correctName}
+fi
+
+## Update Jamf Record
+jamf recon
